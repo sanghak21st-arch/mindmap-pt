@@ -1,0 +1,68 @@
+{
+  "mindMap": {
+    "id": "root",
+    "title": "프로젝트 기획안",
+    "file": null,
+    "fileType": null,
+    "children": [
+      {
+        "id": "node_1708752000000",
+        "title": "시장 분석",
+        "file": "files/market-analysis.pdf",
+        "fileType": "pdf",
+        "fileName": "market-analysis.pdf",
+        "children": [
+          {
+            "id": "node_1708752000001",
+            "title": "경쟁사 현황",
+            "file": null,
+            "fileType": null,
+            "children": []
+          },
+          {
+            "id": "node_1708752000002",
+            "title": "시장 규모",
+            "file": "files/market-size.png",
+            "fileType": "image",
+            "fileName": "market-size.png",
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "node_1708752000003",
+        "title": "제품 소개",
+        "file": "files/product-demo.html",
+        "fileType": "html",
+        "fileName": "product-demo.html",
+        "children": []
+      },
+      {
+        "id": "node_1708752000004",
+        "title": "실행 계획",
+        "file": null,
+        "fileType": null,
+        "children": [
+          {
+            "id": "node_1708752000005",
+            "title": "일정표",
+            "file": "files/schedule.md",
+            "fileType": "md",
+            "fileName": "schedule.md",
+            "children": []
+          },
+          {
+            "id": "node_1708752000006",
+            "title": "예산",
+            "file": "files/budget.txt",
+            "fileType": "txt",
+            "fileName": "budget.txt",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "theme": "professional",
+  "lastModified": "2025-02-24T12:00:00.000Z"
+}

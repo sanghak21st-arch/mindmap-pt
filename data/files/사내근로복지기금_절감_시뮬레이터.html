@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사내근로복지기금 절감 시뮬레이터</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #4338ca; border-radius: 3px; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.card { animation: fadeUp 0.4s ease-out both; }
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+  font-family: 'Pretendard Variable', 'Pretendard', 'Noto Sans KR', -apple-system, sans-serif;
+  color: #e2e8f0;
+}
+
+header { padding: 32px 24px 0; max-width: 1200px; margin: 0 auto; }
+.logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.logo-icon { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #818cf8, #c084fc); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: #fff; }
+.title { font-size: 22px; font-weight: 800; background: linear-gradient(90deg, #a5b4fc, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+
+.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 20px; }
+.summary-card { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); border-radius: 14px; padding: 16px 18px; border: 1px solid rgba(255,255,255,0.08); }
+.summary-card .label { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
+.summary-card .value { font-size: 24px; font-weight: 800; }
+.summary-card .unit { font-size: 12px; font-weight: 400; color: #94a3b8; }
+
+nav { max-width: 1200px; margin: 20px auto 0; padding: 0 24px; }
+.tab-bar { display: flex; gap: 4px; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 4px; }
+.tab-btn { flex: 1; padding: 10px 0; border-radius: 10px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; background: transparent; color: #94a3b8; font-family: inherit; }
+.tab-btn.active { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; }
+
+main { max-width: 1200px; margin: 16px auto 0; padding: 0 24px 40px; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Summary table */
+.table-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); }
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 700px; }
+.table-wrap th { padding: 12px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.table-wrap td { padding: 9px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.th-top { background: rgba(99,102,241,0.15); font-weight: 700; color: #c4b5fd; text-align: center; }
+.th-sub { background: rgba(99,102,241,0.08); font-size: 11px; color: #94a3b8; text-align: right; }
+.th-sub.diff { color: #fbbf24; }
+.sticky-col { position: sticky; left: 0; z-index: 1; text-align: left; }
+.cell-right { text-align: right; font-size: 12px; color: #cbd5e1; }
+.cell-diff { text-align: right; font-size: 12px; font-weight: 700; }
+.cell-diff.neg { color: #34d399; }
+.cell-diff.pos { color: #f87171; }
+.cell-diff.zero { color: #64748b; }
+.row-total { background: rgba(99,102,241,0.08); }
+.row-total td, .row-total .cell-right { font-weight: 600; }
+.bl { border-left: 2px solid rgba(99,102,241,0.3); }
+.bl-light { border-left: 2px solid rgba(99,102,241,0.15); }
+.note { font-size: 11px; color: #64748b; margin-top: 12px; padding-left: 4px; }
+
+/* Employee selector buttons */
+.emp-btns { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.emp-btn { padding: 10px 18px; border-radius: 10px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; background: rgba(255,255,255,0.06); color: #94a3b8; font-family: inherit; }
+.emp-btn.active { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; }
+
+/* Input panel */
+.input-panel { background: rgba(255,255,255,0.03); border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); padding: 20px; }
+.emp-header { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+.emp-name { font-size: 18px; font-weight: 800; color: #a5b4fc; }
+.emp-meta { font-size: 12px; color: #94a3b8; }
+.dep-select { padding: 4px 8px; border-radius: 6px; border: 1px solid #4338ca; background: #1e1b4b; color: #e2e8f0; font-size: 13px; font-family: inherit; }
+.input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .input-grid { grid-template-columns: 1fr; } }
+.scenario-box { border-radius: 12px; padding: 16px; }
+.scenario-box.a { background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.2); }
+.scenario-box.b { background: rgba(168,85,247,0.06); border: 1px solid rgba(168,85,247,0.2); }
+.scenario-title { font-size: 14px; font-weight: 700; margin-bottom: 14px; }
+.scenario-title.a { color: #60a5fa; }
+.scenario-title.b { color: #c084fc; }
+.field-group { margin-bottom: 10px; }
+.field-label { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+.field-input { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; text-align: right; background: #fff; color: #1e293b; outline: none; transition: border-color 0.15s; font-family: inherit; }
+.field-input:focus { border-color: #6366f1; }
+.gross-box { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,0.04); font-size: 12px; display: flex; justify-content: space-between; color: #94a3b8; }
+.gross-val { font-weight: 700; color: #e2e8f0; }
+
+/* Detail tab */
+.detail-header { padding: 16px 20px; background: rgba(99,102,241,0.1); border-bottom: 1px solid rgba(255,255,255,0.06); }
+.detail-row { display: grid; grid-template-columns: 180px 1fr 1fr 1fr; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 8px; margin-bottom: 4px; }
+@media (max-width: 600px) { .detail-row { grid-template-columns: 130px 1fr 1fr 1fr; } }
+.detail-row.total { background: rgba(99,102,241,0.08); }
+.detail-label { font-size: 12px; color: #94a3b8; }
+.detail-row.total .detail-label { font-weight: 700; color: #e2e8f0; }
+.detail-a { text-align: right; font-size: 13px; color: #93c5fd; }
+.detail-b { text-align: right; font-size: 13px; color: #c4b5fd; }
+.detail-diff { text-align: right; font-size: 13px; font-weight: 700; border-radius: 6px; padding: 2px 8px; }
+.detail-diff.neg { color: #34d399; background: rgba(52,211,153,0.1); }
+.detail-diff.pos { color: #f87171; background: rgba(248,113,113,0.1); }
+.detail-diff.zero { color: #64748b; }
+.detail-row.total .detail-a, .detail-row.total .detail-b { font-weight: 700; }
+
+.savings-grid { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.save-card { border-radius: 12px; padding: 16px; }
+.save-card.emp { background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2); }
+.save-card.co { background: rgba(129,140,248,0.08); border: 1px solid rgba(129,140,248,0.2); }
+.save-card .slabel { font-size: 11px; margin-bottom: 4px; }
+.save-card.emp .slabel { color: #6ee7b7; }
+.save-card.co .slabel { color: #a5b4fc; }
+.save-card .svalue { font-size: 22px; font-weight: 800; }
+.save-card.emp .svalue { color: #34d399; }
+.save-card.co .svalue { color: #818cf8; }
+.save-card .sunit { font-size: 12px; font-weight: 400; }
+
+.legend { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; padding: 0 4px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #94a3b8; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+.border-section { border-left-width: 3px; border-left-style: solid; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <div class="logo-icon">₩</div>
+    <div>
+      <div class="title">사내근로복지기금 절감 시뮬레이터</div>
+      <div class="subtitle">A: 일반급여 vs B: 복지기금 비과세 전환 비교</div>
+      <div style="font-size:13px;font-weight:700;color:#94a3b8;margin-top:6px">Copyright © 이상학 (중기이코노미기업지원단)</div>
+    </div>
+  </div>
+  <div class="summary-cards" id="summaryCards"></div>
+</header>
+
+<nav>
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="summary">📊 비교 요약</button>
+    <button class="tab-btn" data-tab="input">✏️ 급여 입력</button>
+    <button class="tab-btn" data-tab="detail">🔍 상세 비교</button>
+  </div>
+</nav>
+
+<main>
+  <div class="tab-content active" id="tab-summary"></div>
+  <div class="tab-content" id="tab-input"></div>
+  <div class="tab-content" id="tab-detail"></div>
+</main>
+
+<script>
+// ── 간이세액표 (정규화: [과세보수하한, 부양1~11]) ──
+const TAX_TABLE=[[770000,0,0,0,0,0,0,0,0,0,0,0],[1060000,1040,0,0,0,0,0,0,0,0,0,0],[1100000,1600,0,0,0,0,0,0,0,0,0,0],[1150000,2300,0,0,0,0,0,0,0,0,0,0],[1200000,2990,0,0,0,0,0,0,0,0,0,0],[1250000,3700,0,0,0,0,0,0,0,0,0,0],[1300000,4740,0,0,0,0,0,0,0,0,0,0],[1340000,5560,1060,0,0,0,0,0,0,0,0,0],[1400000,6800,2300,0,0,0,0,0,0,0,0,0],[1450000,7830,3330,0,0,0,0,0,0,0,0,0],[1500000,8920,4420,0,0,0,0,0,0,0,0,0],[1550000,9950,5450,0,0,0,0,0,0,0,0,0],[1600000,10980,6480,0,0,0,0,0,0,0,0,0],[1650000,12020,7520,0,0,0,0,0,0,0,0,0],[1700000,13050,8550,0,0,0,0,0,0,0,0,0],[1720000,13460,8960,1040,0,0,0,0,0,0,0,0],[1750000,14080,9580,1640,0,0,0,0,0,0,0,0],[1800000,15110,10610,2630,0,0,0,0,0,0,0,0],[1850000,16150,11650,3620,0,0,0,0,0,0,0,0],[1890000,16970,12470,4410,1040,0,0,0,0,0,0,0],[1900000,17180,12680,4610,1240,0,0,0,0,0,0,0],[1950000,18210,13710,5600,2230,0,0,0,0,0,0,0],[2000000,19520,14750,6600,3220,0,0,0,0,0,0,0],[2050000,21130,15780,7590,4210,0,0,0,0,0,0,0],[2060000,21450,15990,7790,4410,1040,0,0,0,0,0,0],[2100000,22740,16810,8580,5210,1830,0,0,0,0,0,0],[2150000,24340,17840,9570,6200,2820,0,0,0,0,0,0],[2200000,25950,18950,10570,7190,3820,0,0,0,0,0,0],[2230000,26910,19910,11160,7790,4410,1040,0,0,0,0,0],[2250000,27560,20560,11560,8180,4810,1430,0,0,0,0,0],[2300000,29160,22160,12550,9180,5800,2430,0,0,0,0,0],[2350000,30770,23770,13540,10170,6790,3420,0,0,0,0,0],[2400000,32380,25380,14530,11160,7780,4410,1030,0,0,0,0],[2450000,33980,26980,15530,12150,8780,5400,2030,0,0,0,0],[2500000,35600,28600,16530,13150,9780,6400,3030,0,0,0,0],[2570000,38000,31000,18010,14630,11260,7880,4510,1130,0,0,0],[2600000,39690,32020,18650,15270,11900,8520,5150,1770,0,0,0],[2650000,43970,33730,20240,16330,12960,9580,6210,2830,0,0,0],[2700000,48250,35450,21890,17390,14020,10640,7270,3890,0,0,0],[2730000,50810,36470,22880,18030,14650,11280,7900,4530,1150,0,0],[2750000,52530,37160,23540,18450,15070,11700,8320,4950,1570,0,0],[2800000,56800,39300,25180,19930,16130,12760,9380,6010,2630,0,0],[2850000,61080,43580,26830,21580,17190,13820,10440,7070,3690,0,0],[2890000,64510,47010,28150,22900,18040,14670,11290,7920,4540,1170,0],[2900000,65360,47860,28480,23230,18250,14880,11500,8130,4750,1380,0],[2950000,69640,52140,30130,24880,19630,15940,12560,9190,5810,2440,0],[3000000,74350,56850,31940,26690,21440,17100,13730,10350,6980,3600,0],[3040000,77770,60270,33260,28010,22760,17950,14580,11200,7830,4450,1080],[3100000,82900,65400,35240,29990,24740,19490,15850,12470,9100,5720,2350],[3200000,91460,73960,38540,33290,28040,22790,17970,14590,11220,7840,4470],[3300000,102770,82520,46720,36580,31330,26080,20830,16710,13340,9960,6590],[3400000,114990,91080,54640,41510,34500,29250,24000,18750,15370,12000,8620],[3500000,127220,102220,62460,49340,37630,32380,27130,21880,17390,14010,10640],[3600000,139440,114440,70280,57160,44030,35510,30260,25010,19760,16020,12650],[3700000,151670,126670,78110,64980,51860,38730,33390,28140,22890,18030,14660],[3800000,169260,141400,87680,74560,61430,48310,37220,31970,26720,21470,17120],[3900000,182610,154670,97370,83110,69990,56860,43740,35390,30140,24890,19640],[4000000,195960,167950,109590,91670,78550,65420,52300,39170,33570,28320,23070],[4100000,209310,181220,121820,103070,87100,73980,60850,47730,36990,31740,26490],[4200000,222660,194500,134040,115290,96540,82540,69410,56290,43160,35160,29910],[4300000,236010,207770,146270,127520,108770,91090,77970,64840,51720,38590,33330],[4400000,249360,221050,158490,139740,120990,102240,86530,73400,60280,47150,36760],[4500000,262840,234460,170850,152100,133350,114600,95850,82050,68930,55800,42680],[4600000,279370,250910,186250,167500,148750,130000,111250,92500,77960,64830,51710],[4700000,293390,264860,199150,180400,161650,142900,124150,105400,86990,73860,60740],[4800000,307420,278810,212050,193300,174550,155800,137050,118300,99550,82890,69770],[4900000,321440,292760,224950,206200,187450,168700,149950,131200,112450,93700,78800],[5000000,335470,306710,237850,219100,200350,181600,162850,144100,125350,106600,87850],[5200000,363520,334610,263650,244900,226150,207400,188650,169900,151150,132400,113650],[5400000,391570,362510,289450,270700,251950,233200,214450,195700,176950,158200,139450],[5600000,419620,390410,315250,296500,277750,259000,240250,221500,202750,184000,165250],[5800000,447670,418310,341050,322300,303550,284800,266050,247300,228550,209800,191050],[5840000,470380,441000,372100,353350,334600,315850,297100,278350,259600,240850,222100],[5900000,483220,451960,382520,363770,345020,326270,307520,288770,270020,251270,232520],[6000000,505900,466060,395720,376970,358220,339470,320720,301970,283220,264470,245720],[6200000,551260,503810,422120,403370,384620,365870,347120,328370,309620,290870,272120],[6400000,596620,548930,448520,429770,411020,392270,373520,354770,336020,317270,298520],[6600000,641980,594050,474920,456170,437420,418670,399920,381170,362420,343670,324920],[6800000,687340,639170,515110,485110,463820,445070,426320,407570,388820,370070,351320],[7000000,732700,684290,557350,527350,497350,471470,452720,433970,415220,396470,377720],[7200000,778060,729410,599590,569590,539590,509590,479590,460370,441620,422870,404120],[7400000,823420,774530,641830,611830,581830,551830,521830,491830,468020,449270,430520],[7600000,868780,819650,684070,654070,624070,594070,564070,534070,504070,475670,456920],[7800000,914140,864770,726310,696310,666310,636310,606310,576310,546310,516310,486310],[8000000,959500,909890,768550,738550,708550,678550,648550,618550,588550,558550,528550],[8200000,1004860,955010,810790,780790,750790,720790,690790,660790,630790,600790,570790],[8400000,1050780,1000680,853580,823580,793580,763580,733580,703580,673580,643580,613580],[8600000,1097580,1047240,897260,867260,837260,807260,777260,747260,717260,687260,657260],[8800000,1144380,1093800,940940,910940,880940,850940,820940,790940,760940,730940,700940],[9000000,1191180,1140360,984620,954620,924620,894620,864620,834620,804620,774620,744620],[9200000,1237980,1186920,1028300,998300,968300,938300,908300,878300,848300,818300,788300],[9400000,1306070,1233480,1071980,1041980,1011980,981980,951980,921980,891980,861980,831980],[9600000,1374320,1299160,1115660,1085660,1055660,1025660,995660,965660,935660,905660,875660],[9800000,1442570,1367060,1159340,1129340,1099340,1069340,1039340,1009340,979340,949340,919340],[9980000,1503990,1428170,1198650,1168650,1138650,1108650,1078650,1048650,1018650,988650,958650]];
+
+// ── 설정 (요율) ──
+const R = {
+  npE:.0475, npC:.0475, hiE:.03595, hiC:.03595, lcE:.004724, lcC:.004724,
+  eiE:.009, eiC:.009, esC:.0025, iaC:.008,
+  npFloor:400000, npCeil:6370000, mealLim:200000, localRate:0.1
+};
+
+function lookupTax(income, dep) {
+  const col = Math.min(Math.max(dep,1),11);
+  let tax = 0;
+  for (let i=0; i<TAX_TABLE.length; i++) {
+    if (TAX_TABLE[i][0] <= income) tax = TAX_TABLE[i][col]; else break;
+  }
+  return tax;
+}
+
+function calc(inp, dep) {
+  const {basePay,taxableAllow,overtime,bonus,mealAllow,taxFreeOther} = inp;
+  const gross = basePay+taxableAllow+overtime+bonus+mealAllow+taxFreeOther;
+  const taxable = basePay+taxableAllow+overtime+bonus;
+  if(gross===0) return {grossPay:0,taxableIncome:0,npE:0,npC:0,hiE:0,hiC:0,lcE:0,lcC:0,eiE:0,eiC:0,esC:0,iaC:0,incomeTax:0,localTax:0,totalDeduct:0,netPay:0,companyBurden:0,totalCost:0};
+  const pb = Math.min(Math.max(taxable,R.npFloor),R.npCeil);
+  const npE=Math.round(pb*R.npE), npC=Math.round(pb*R.npC);
+  const hiE=Math.round(taxable*R.hiE), hiC=Math.round(taxable*R.hiC);
+  const lcE=Math.round(taxable*R.lcE), lcC=Math.round(taxable*R.lcC);
+  const eiE=Math.round(taxable*R.eiE), eiC=Math.round(taxable*R.eiC);
+  const esC=Math.round(taxable*R.esC), iaC=Math.round(taxable*R.iaC);
+  const it=lookupTax(taxable,dep), lt=Math.round(it*R.localRate);
+  const td=npE+hiE+lcE+eiE+it+lt;
+  const net=gross-td;
+  const cb=npC+hiC+lcC+eiC+esC+iaC;
+  return {grossPay:gross,taxableIncome:taxable,npE,npC,hiE,hiC,lcE,lcC,eiE,eiC,esC,iaC,incomeTax:it,localTax:lt,totalDeduct:td,netPay:net,companyBurden:cb,totalCost:gross+cb};
+}
+
+const fmt = n => n.toLocaleString('ko-KR');
+
+// ── B 기본급 역산: A실수령액 == B실수령액이 되는 기본급 찾기 (이진탐색) ──
+function solveBasePayB(emp) {
+  const aResult = calc(emp.a, emp.dep);
+  const targetNet = aResult.netPay;
+  if(targetNet <= 0) return {basePay:0, bInput:{basePay:0,taxableAllow:0,overtime:0,bonus:0,mealAllow:0,taxFreeOther:0}, result: calc({basePay:0,taxableAllow:0,overtime:0,bonus:0,mealAllow:0,taxFreeOther:0}, emp.dep)};
+
+  const wf = emp.welfareFund || 0;
+  if(wf <= 0) return {basePay: emp.a.basePay, bInput: {...emp.a}, result: calc(emp.a, emp.dep)};
+
+  function buildB(bp) {
+    return { basePay:bp, taxableAllow:emp.a.taxableAllow, overtime:emp.a.overtime, bonus:emp.a.bonus, mealAllow:emp.a.mealAllow, taxFreeOther:wf };
+  }
+
+  let lo = 0, hi = emp.a.basePay + wf;
+  for(let i=0; i<50; i++) {
+    const mid = Math.round((lo+hi)/2);
+    const r = calc(buildB(mid), emp.dep);
+    if(r.netPay < targetNet) lo = mid;
+    else if(r.netPay > targetNet) hi = mid;
+    else { lo = hi = mid; break; }
+    if(hi - lo <= 1) break;
+  }
+  const rLo = calc(buildB(lo), emp.dep);
+  const rHi = calc(buildB(hi), emp.dep);
+  if(Math.abs(rHi.netPay - targetNet) <= Math.abs(rLo.netPay - targetNet)) {
+    return {basePay:hi, bInput:buildB(hi), result:rHi};
+  }
+  return {basePay:lo, bInput:buildB(lo), result:rLo};
+}
+
+// ── State ──
+let employees = [
+  {id:"E001",name:"홍길동",dept:"영업",rank:"대리",dep:2,
+    a:{basePay:0,taxableAllow:0,overtime:0,bonus:0,mealAllow:0,taxFreeOther:0},
+    welfareFund:0},
+  {id:"E002",name:"김영희",dept:"경영지원",rank:"사원",dep:1,
+    a:{basePay:0,taxableAllow:0,overtime:0,bonus:0,mealAllow:0,taxFreeOther:0},
+    welfareFund:0},
+  {id:"E003",name:"이철수",dept:"개발",rank:"과장",dep:3,
+    a:{basePay:0,taxableAllow:0,overtime:0,bonus:0,mealAllow:0,taxFreeOther:0},
+    welfareFund:0}
+];
+let activeTab = 'summary';
+let activeEmpIdx = 0;
+
+const FIELDS_A = [
+  {key:'basePay',label:'기본급'},
+  {key:'taxableAllow',label:'과세수당'},
+  {key:'overtime',label:'연장/야간/휴일'},
+  {key:'bonus',label:'상여금'},
+  {key:'mealAllow',label:'비과세 식대'},
+  {key:'taxFreeOther',label:'비과세 기타'}
+];
+
+const ROWS = [
+  {k:'grossPay',l:'총지급액',s:'pay'},
+  {k:'taxableIncome',l:'과세보수',s:'pay'},
+  {k:'npE',l:'국민연금(개인)',s:'de'},{k:'hiE',l:'건강보험(개인)',s:'de'},{k:'lcE',l:'장기요양(개인)',s:'de'},{k:'eiE',l:'고용보험(개인)',s:'de'},
+  {k:'incomeTax',l:'소득세',s:'de'},{k:'localTax',l:'지방소득세',s:'de'},
+  {k:'totalDeduct',l:'개인공제 합계',s:'det'},
+  {k:'netPay',l:'실수령액',s:'net'},
+  {k:'npC',l:'국민연금(회사)',s:'dc'},{k:'hiC',l:'건강보험(회사)',s:'dc'},{k:'lcC',l:'장기요양(회사)',s:'dc'},{k:'eiC',l:'고용보험(회사)',s:'dc'},
+  {k:'esC',l:'고용안정/직능(회사)',s:'dc'},{k:'iaC',l:'산재보험(회사)',s:'dc'},
+  {k:'companyBurden',l:'회사부담 합계',s:'dct'},
+  {k:'totalCost',l:'회사총비용',s:'tot'}
+];
+
+const SC = {
+  pay:'#bbf7d0', de:'#fde68a', det:'#fde047', net:'#93c5fd',
+  dc:'#f9a8d4', dct:'#f472b6', tot:'#c4b5fd'
+};
+const isTotal = s => ['det','dct','tot','net'].includes(s);
+
+function getResults() {
+  return employees.map(e=>{
+    const a = calc(e.a, e.dep);
+    const solved = solveBasePayB(e);
+    return {a, b: solved.result, bInput: solved.bInput, bBasePay: solved.basePay};
+  });
+}
+
+// ── Render Functions ──
+function renderSummaryCards() {
+  const res = getResults();
+  let totalCostA=0, totalCostB=0;
+  res.forEach(r=>{ totalCostA+=r.a.totalCost; totalCostB+=r.b.totalCost; });
+  const coSave = totalCostA - totalCostB;
+  const pct = totalCostA>0 ? (coSave/totalCostA*100).toFixed(2) : '0.00';
+  const items = [
+    {label:'A 회사 총 인건비',value:totalCostA,color:'#94a3b8',isMoney:true,sign:false},
+    {label:'B 회사 총 인건비',value:totalCostB,color:'#c4b5fd',isMoney:true,sign:false},
+    {label:'회사 비용 절감액 (A-B)',value:coSave,color:'#34d399',isMoney:true,sign:true},
+    {label:'인건비 대비 절감률',value:pct,color:'#fbbf24',isMoney:false}
+  ];
+  document.getElementById('summaryCards').innerHTML = items.map(c=>
+    `<div class="summary-card"><div class="label">${c.label}</div><div class="value" style="color:${c.color}">${c.isMoney?(c.sign&&c.value>=0?'+':'')+fmt(c.value)+'<span class="unit"> 원/월</span>':c.value+'<span class="unit"> %</span>'}</div></div>`
+  ).join('');
+}
+
+function renderSummaryTab() {
+  const res = getResults();
+  let h = '<div class="card table-wrap"><table>';
+  // header row 1
+  h += '<tr><th class="th-top sticky-col" style="background:#1e1b4b;text-align:left;color:#a5b4fc;padding:12px 14px">항목</th>';
+  employees.forEach(e=>{ h += `<th class="th-top bl" colspan="3">${e.name} (${e.id})</th>`; });
+  h += '</tr>';
+  // header row 2
+  h += '<tr><th class="th-sub sticky-col" style="background:#1a1744"></th>';
+  employees.forEach(()=>{ h += '<th class="th-sub bl">A (일반)</th><th class="th-sub">B (복지기금)</th><th class="th-sub diff">차이(B-A)</th>'; });
+  h += '</tr>';
+  // data rows
+  ROWS.forEach(row=>{
+    const tot = isTotal(row.s);
+    h += `<tr class="${tot?'row-total':''}">`;
+    h += `<td class="sticky-col border-section" style="padding:9px 14px;font-weight:${tot?700:400};font-size:${tot?13:12}px;color:${tot?'#e2e8f0':'#cbd5e1'};background:${tot?'#1e1b4b':'#171433'};border-left-color:${SC[row.s]}">${row.l}</td>`;
+    res.forEach(r=>{
+      const a=r.a[row.k], b=r.b[row.k], d=b-a;
+      h += `<td class="cell-right bl-light" style="font-weight:${tot?600:400}">${fmt(a)}</td>`;
+      h += `<td class="cell-right" style="font-weight:${tot?600:400}">${fmt(b)}</td>`;
+      h += `<td class="cell-diff ${d<0?'neg':d>0?'pos':'zero'}">${d!==0?(d>0?'+':'')+fmt(d):'-'}</td>`;
+    });
+    h += '</tr>';
+  });
+  h += '</table></div>';
+  h += '<p class="note">※ 차이가 음수(녹색)이면 B시나리오에서 절감되는 금액입니다.</p>';
+  document.getElementById('tab-summary').innerHTML = h;
+}
+
+function renderInputTab() {
+  const res = getResults();
+  const emp = employees[activeEmpIdx];
+  const r = res[activeEmpIdx];
+  let h = '<div class="card">';
+  // emp buttons
+  h += '<div class="emp-btns">';
+  employees.forEach((e,i)=>{ h += `<button class="emp-btn ${i===activeEmpIdx?'active':''}" onclick="activeEmpIdx=${i};render()">${e.name} (${e.id})</button>`; });
+  h += '</div>';
+  h += '<div class="input-panel">';
+  // header
+  h += '<div class="emp-header">';
+  h += `<div class="emp-name">${emp.name}</div><div class="emp-meta">${emp.dept} · ${emp.rank}</div>`;
+  h += '<div style="margin-left:auto;display:flex;align-items:center;gap:6px"><span style="font-size:12px;color:#94a3b8">부양가족수</span>';
+  h += `<select class="dep-select" onchange="employees[${activeEmpIdx}].dep=+this.value;render()">`;
+  for(let i=1;i<=11;i++) h += `<option value="${i}" ${emp.dep===i?'selected':''}>${i}명</option>`;
+  h += '</select></div></div>';
+  // reset buttons
+  h += '<div style="display:flex;gap:8px;margin-bottom:16px">';
+  h += `<button onclick="resetEmp(${activeEmpIdx})" style="padding:7px 14px;border-radius:8px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);color:#f87171;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.08)'">🗑 ${emp.name} 초기화</button>`;
+  h += `<button onclick="resetAll()" style="padding:7px 14px;border-radius:8px;border:1px solid rgba(251,191,36,0.3);background:rgba(251,191,36,0.08);color:#fbbf24;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s" onmouseover="this.style.background='rgba(251,191,36,0.2)'" onmouseout="this.style.background='rgba(251,191,36,0.08)'">🗑 전체 초기화</button>`;
+  h += '</div>';
+  // input grid
+  h += '<div class="input-grid">';
+
+  // ── A: 일반 급여 (전체 입력) ──
+  h += '<div class="scenario-box a"><div class="scenario-title a">A. 일반 급여</div>';
+  FIELDS_A.forEach(f=>{
+    const v = emp.a[f.key];
+    h += `<div class="field-group"><label class="field-label">${f.label}</label>`;
+    h += `<input class="field-input" data-sc="a" data-key="${f.key}" type="text" inputmode="numeric" value="${v===0?'':fmt(v)}" `;
+    h += `oninput="updateFieldA(${activeEmpIdx},'${f.key}',this)" `;
+    h += `onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#d1d5db'"></div>`;
+  });
+  h += `<div class="gross-box"><span>총지급액</span><span class="gross-val">${fmt(r.a.grossPay)} 원</span></div>`;
+  h += `<div class="gross-box" style="margin-top:6px"><span>실수령액</span><span class="gross-val" style="color:#60a5fa">${fmt(r.a.netPay)} 원</span></div>`;
+  h += '</div>';
+
+  // ── B: 복지기금 전환 (복지기금 금액만 입력, 나머지 자동) ──
+  h += '<div class="scenario-box b"><div class="scenario-title b">B. 복지기금 전환</div>';
+  h += '<div style="background:rgba(168,85,247,0.1);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#c4b5fd;line-height:1.5">';
+  h += '💡 복지기금 금액만 입력하면, A와 <b>동일한 실수령액</b>이 되도록 기본급이 자동 역산됩니다.</div>';
+
+  // 복지기금 입력
+  h += '<div class="field-group"><label class="field-label" style="color:#c084fc;font-weight:700;font-size:12px">사내근로복지기금 (비과세)</label>';
+  h += `<input class="field-input" data-sc="b" data-key="welfareFund" type="text" inputmode="numeric" value="${emp.welfareFund===0?'':fmt(emp.welfareFund)}" `;
+  h += `oninput="updateWelfare(${activeEmpIdx},this)" style="border-color:#a78bfa;background:#faf5ff" `;
+  h += `onfocus="this.style.borderColor='#7c3aed'" onblur="this.style.borderColor='#a78bfa'"></div>`;
+
+  // 자동 계산된 항목 표시
+  const bi = r.bInput || {basePay:0, taxableAllow:0, overtime:0, bonus:0, mealAllow:0, taxFreeOther:0};
+  const autoFields = [
+    {label:'기본급 (자동계산)', value:bi.basePay, highlight:true},
+    {label:'과세수당', value:bi.taxableAllow},
+    {label:'연장/야간/휴일', value:bi.overtime},
+    {label:'상여금', value:bi.bonus},
+    {label:'비과세 식대', value:bi.mealAllow},
+  ];
+  autoFields.forEach(f=>{
+    h += `<div class="field-group"><label class="field-label">${f.label}</label>`;
+    h += `<div style="width:100%;padding:6px 8px;border:1px solid ${f.highlight?'#a78bfa':'#e2e8f0'};border-radius:6px;font-size:13px;text-align:right;background:${f.highlight?'#ede9fe':'#f1f5f9'};color:${f.highlight?'#6d28d9':'#64748b'};font-weight:${f.highlight?700:400}">${f.value===0?'-':fmt(f.value)}</div></div>`;
+  });
+
+  h += `<div class="gross-box"><span>총지급액</span><span class="gross-val">${fmt(r.b.grossPay)} 원</span></div>`;
+  h += `<div class="gross-box" style="margin-top:6px"><span>실수령액</span><span class="gross-val" style="color:#c084fc">${fmt(r.b.netPay)} 원</span></div>`;
+
+  // A기본급 대비 절감 표시
+  if(emp.welfareFund > 0 && emp.a.basePay > 0) {
+    const diff = emp.a.basePay - bi.basePay;
+    h += `<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);font-size:12px;color:#6ee7b7">`;
+    h += `기본급 절감: <b style="color:#34d399">${fmt(diff)} 원</b> (A: ${fmt(emp.a.basePay)} → B: ${fmt(bi.basePay)})`;
+    h += '</div>';
+  }
+
+  h += '</div>';
+  h += '</div></div></div>';
+  document.getElementById('tab-input').innerHTML = h;
+}
+
+function renderDetailTab() {
+  const res = getResults();
+  const emp = employees[activeEmpIdx];
+  const r = res[activeEmpIdx];
+  let h = '<div class="card">';
+  h += '<div class="emp-btns">';
+  employees.forEach((e,i)=>{ h += `<button class="emp-btn ${i===activeEmpIdx?'active':''}" onclick="activeEmpIdx=${i};render()">${e.name}</button>`; });
+  h += '</div>';
+  h += '<div style="background:rgba(255,255,255,0.03);border-radius:14px;border:1px solid rgba(255,255,255,0.08);overflow:hidden">';
+  h += `<div class="detail-header"><span style="font-size:16px;font-weight:700;color:#a5b4fc">${emp.name}</span><span style="font-size:12px;color:#94a3b8;margin-left:8px">${emp.dept} · ${emp.rank} · 부양${emp.dep}명</span></div>`;
+  h += '<div style="padding:16px">';
+  ROWS.forEach(row=>{
+    const tot = isTotal(row.s);
+    const a=r.a[row.k], b=r.b[row.k], d=b-a;
+    h += `<div class="detail-row ${tot?'total':''}" style="border-left:3px solid ${SC[row.s]}">`;
+    h += `<div class="detail-label">${row.l}</div>`;
+    h += `<div class="detail-a" style="font-weight:${tot?700:400}">${fmt(a)}</div>`;
+    h += `<div class="detail-b" style="font-weight:${tot?700:400}">${fmt(b)}</div>`;
+    h += `<div class="detail-diff ${d<0?'neg':d>0?'pos':'zero'}">${d!==0?(d<0?'▼':'▲')+' '+fmt(Math.abs(d)):'—'}</div>`;
+    h += '</div>';
+  });
+  // savings cards
+  h += '<div class="savings-grid">';
+  h += `<div class="save-card emp"><div class="slabel">직원 세금 절감</div><div class="svalue">${fmt(r.a.totalDeduct-r.b.totalDeduct)}<span class="sunit"> 원</span></div></div>`;
+  h += `<div class="save-card co"><div class="slabel">회사 비용 절감</div><div class="svalue">${fmt(r.a.totalCost-r.b.totalCost)}<span class="sunit"> 원</span></div></div>`;
+  h += '</div></div></div>';
+  // legend
+  h += '<div class="legend">';
+  h += '<div class="legend-item"><div class="legend-dot" style="background:#93c5fd"></div>A (일반)</div>';
+  h += '<div class="legend-item"><div class="legend-dot" style="background:#c4b5fd"></div>B (복지기금)</div>';
+  h += '<div class="legend-item"><div class="legend-dot" style="background:#34d399"></div>절감(B&lt;A)</div>';
+  h += '<div class="legend-item"><div class="legend-dot" style="background:#f87171"></div>증가(B&gt;A)</div>';
+  h += '</div></div>';
+  document.getElementById('tab-detail').innerHTML = h;
+}
+
+function render() {
+  renderSummaryCards();
+  renderSummaryTab();
+  renderInputTab();
+  renderDetailTab();
+}
+
+function updateFieldA(empIdx, key, el) {
+  const raw = el.value.replace(/[^0-9]/g,'');
+  const v = raw===''?0:parseInt(raw,10);
+  employees[empIdx].a[key] = v;
+  const pos = el.selectionStart;
+  const oldLen = el.value.length;
+  render();
+  const inputTab = document.getElementById('tab-input');
+  const inputs = inputTab.querySelectorAll('input[data-sc="a"]');
+  const fIdx = FIELDS_A.findIndex(f=>f.key===key);
+  if(inputs[fIdx]) {
+    inputs[fIdx].focus();
+    const newLen = inputs[fIdx].value.length;
+    const newPos = pos + (newLen - oldLen);
+    inputs[fIdx].setSelectionRange(newPos, newPos);
+  }
+}
+
+function updateWelfare(empIdx, el) {
+  const raw = el.value.replace(/[^0-9]/g,'');
+  const v = raw===''?0:parseInt(raw,10);
+  employees[empIdx].welfareFund = v;
+  const pos = el.selectionStart;
+  const oldLen = el.value.length;
+  render();
+  const inputTab = document.getElementById('tab-input');
+  const wInput = inputTab.querySelector('input[data-key="welfareFund"]');
+  if(wInput) {
+    wInput.focus();
+    const newLen = wInput.value.length;
+    const newPos = pos + (newLen - oldLen);
+    wInput.setSelectionRange(newPos, newPos);
+  }
+}
+
+function resetEmp(idx) {
+  employees[idx].a = {basePay:0,taxableAllow:0,overtime:0,bonus:0,mealAllow:0,taxFreeOther:0};
+  employees[idx].welfareFund = 0;
+  render();
+}
+
+function resetAll() {
+  employees.forEach((_,i) => resetEmp(i));
+}
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+    document.getElementById('tab-'+activeTab).classList.add('active');
+  });
+});
+
+// Initial render
+render();
+</script>
+</body>
+</html>

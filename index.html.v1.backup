@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindMap PT</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        .node-line { position: absolute; pointer-events: none; }
+        .resize-handle { position: absolute; z-index: 100; }
+        .resize-handle:hover { background: #3b82f6; }
+        .resize-handle.corner { width: 12px; height: 12px; }
+        .resize-handle.edge { background: transparent; }
+        .resize-handle.edge:hover { background: #3b82f6; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+        
+        // 테마 정의
+        const themes = {
+            professional: {
+                name: '프로페셔널',
+                primary: 'bg-blue-600',
+                primaryHover: 'hover:bg-blue-700',
+                secondary: 'bg-slate-50',
+                nodeBg: 'bg-white',
+                nodeBorder: 'border-slate-200',
+                text: 'text-slate-800',
+                accent: 'text-blue-600',
+                headerText: 'text-white'
+            },
+            dark: {
+                name: '다크',
+                primary: 'bg-slate-700',
+                primaryHover: 'hover:bg-slate-800',
+                secondary: 'bg-slate-900',
+                nodeBg: 'bg-slate-800',
+                nodeBorder: 'border-slate-600',
+                text: 'text-slate-100',
+                accent: 'text-blue-400',
+                headerText: 'text-white'
+            },
+            warm: {
+                name: '웜',
+                primary: 'bg-orange-500',
+                primaryHover: 'hover:bg-orange-600',
+                secondary: 'bg-orange-50',
+                nodeBg: 'bg-white',
+                nodeBorder: 'border-orange-200',
+                text: 'text-stone-800',
+                accent: 'text-orange-600',
+                headerText: 'text-white'
+            },
+            nature: {
+                name: '네이처',
+                primary: 'bg-green-600',
+                primaryHover: 'hover:bg-green-700',
+                secondary: 'bg-green-50',
+                nodeBg: 'bg-white',
+                nodeBorder: 'border-green-200',
+                text: 'text-green-900',
+                accent: 'text-green-600',
+                headerText: 'text-white'
+            }
+        };
+        
+        // 초기 데이터
+        const initialData = {
+            id: 'root',
+            title: '새 마인드맵',
+            file: null,
+            fileType: null,
+            children: []
+        };
+        
+        // 아이콘 컴포넌트
+        const FileIcon = ({ type }) => {
+            const icons = {
+                pdf: '📄',
+                html: '🌐',
+                image: '🖼️',
+                md: '📝',
+                txt: '📃',
+                default: '📎'
+            };
+            return <span>{icons[type] || icons.default}</span>;
+        };
+        
+        function App() {
+            const [theme, setTheme] = useState('professional');
+            const [mindMap, setMindMap] = useState(initialData);
+            const [expandedNodes, setExpandedNodes] = useState(new Set(['root']));
+            const [selectedNode, setSelectedNode] = useState(null);
+            const [editingNode, setEditingNode] = useState(null);
+            const [modalSize, setModalSize] = useState({ width: 1000, height: 700 });
+            const [isResizing, setIsResizing] = useState(false);
+            const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+            const [fitMode, setFitMode] = useState('width');
+            const [drawingMode, setDrawingMode] = useState(null);
+            const [drawingColor, setDrawingColor] = useState('#ffeb3b');
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [showHelp, setShowHelp] = useState(false);
+            const [fileSystemHandle, setFileSystemHandle] = useState(null);
+            
+            const currentTheme = themes[theme];
+            const modalRef = useRef(null);
+            const canvasRef = useRef(null);
+            const ctxRef = useRef(null);
+            
+            // 데이터 저장
+            const saveData = async () => {
+                try {
+                    const data = { mindMap, theme, lastModified: new Date().toISOString() };
+                    const jsonStr = JSON.stringify(data, null, 2);
+                    const blob = new Blob([jsonStr], { type: 'application/json' });
+                    
+                    // File System API 지원 시
+                    if (fileSystemHandle) {
+                        try {
+                            const fileHandle = await fileSystemHandle.getFileHandle('mindmap.json', { create: true });
+                            const writable = await fileHandle.createWritable();
+                            await writable.write(blob);
+                            await writable.close();
+                            console.log('✅ 데이터 저장 완료');
+                            return;
+                        } catch (e) {
+                            console.warn('File System API 저장 실패, 다운로드로 대체');
+                        }
+                    }
+                    
+                    // 다운로드 방식
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'mindmap.json';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    alert('mindmap.json이 다운로드되었습니다. data/폴터에 저장해주세요.');
+                } catch (error) {
+                    console.error('저장 실패:', error);
+                }
+            };
+            
+            // 데이터 불러오기
+            const loadData = async () => {
+                try {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        
+                        const text = await file.text();
+                        const data = JSON.parse(text);
+                        
+                        if (data.mindMap) {
+                            setMindMap(data.mindMap);
+                            if (data.theme) setTheme(data.theme);
+                            setExpandedNodes(new Set(['root']));
+                            console.log('✅ 데이터 로드 완료');
+                        }
+                    };
+                    input.click();
+                } catch (error) {
+                    console.error('로드 실패:', error);
+                    alert('파일을 불러올 수 없습니다.');
+                }
+            };
+            
+            // ZIP으로 낭로내기
+            const exportZip = async () => {
+                try {
+                    const zip = new JSZip();
+                    
+                    // mindmap.json
+                    const data = { mindMap, theme, lastModified: new Date().toISOString() };
+                    zip.file('data/mindmap.json', JSON.stringify(data, null, 2));
+                    
+                    // 파일들 추가 (실제로는 files/ 폴터의 파일들을 읽어와야 함)
+                    // 지금은 구조만
+                    zip.file('index.html', '...'); // 실제로는 현재 HTML 내용
+                    
+                    const content = await zip.generateAsync({ type: 'blob' });
+                    saveAs(content, 'mindmap-pt-backup.zip');
+                    alert('ZIP 파일이 다운로드되었습니다.');
+                } catch (error) {
+                    console.error('ZIP 생성 실패:', error);
+                }
+            };
+            
+            // 노드 찾기
+            const findNode = (id, node = mindMap) => {
+                if (node.id === id) return node;
+                if (node.children) {
+                    for (const child of node.children) {
+                        const found = findNode(id, child);
+                        if (found) return found;
+                    }
+                }
+                return null;
+            };
+            
+            // 노드 업데이트
+            const updateNodeInTree = (nodeId, updates, node = mindMap) => {
+                if (node.id === nodeId) {
+                    return { ...node, ...updates };
+                }
+                if (node.children) {
+                    return {
+                        ...node,
+                        children: node.children.map(child => updateNodeInTree(nodeId, updates, child))
+                    };
+                }
+                return node;
+            };
+            
+            // 노드 추가
+            const addNode = (parentId) => {
+                const newNode = {
+                    id: 'node_' + Date.now(),
+                    title: '새 노드',
+                    file: null,
+                    fileType: null,
+                    children: []
+                };
+                
+                const addToParent = (node) => {
+                    if (node.id === parentId) {
+                        return {
+                            ...node,
+                            children: [...(node.children || []), newNode]
+                        };
+                    }
+                    if (node.children) {
+                        return {
+                            ...node,
+                            children: node.children.map(addToParent)
+                        };
+                    }
+                    return node;
+                };
+                
+                setMindMap(prev => addToParent(prev));
+                setExpandedNodes(prev => new Set([...prev, parentId]));
+            };
+            
+            // 노드 삭제
+            const deleteNode = (nodeId) => {
+                if (nodeId === 'root') {
+                    alert('루트 노드는 삭제할 수 없습니다.');
+                    return;
+                }
+                
+                if (!confirm('이 노드를 삭제하시겠습니까?')) return;
+                
+                const removeFromParent = (node) => {
+                    if (node.children) {
+                        return {
+                            ...node,
+                            children: node.children
+                                .filter(child => child.id !== nodeId)
+                                .map(removeFromParent)
+                        };
+                    }
+                    return node;
+                };
+                
+                setMindMap(prev => removeFromParent(prev));
+            };
+            
+            // 노드 제목 업데이트
+            const updateNodeTitle = (nodeId, title) => {
+                setMindMap(prev => updateNodeInTree(nodeId, { title }, prev));
+            };
+            
+            // 파일 첨부
+            const attachFile = async (nodeId, file) => {
+                const fileName = file.name;
+                const fileType = fileName.split('.').pop().toLowerCase();
+                
+                // 파일 타입 분류
+                let type = 'default';
+                if (['pdf'].includes(fileType)) type = 'pdf';
+                else if (['html', 'htm'].includes(fileType)) type = 'html';
+                else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(fileType)) type = 'image';
+                else if (['md', 'markdown'].includes(fileType)) type = 'md';
+                else if (['txt', 'text'].includes(fileType)) type = 'txt';
+                
+                // 실제로는 files/ 폴터에 저장해야 함
+                // 지금은 파일명만 저장
+                const filePath = `files/${fileName}`;
+                
+                setMindMap(prev => updateNodeInTree(nodeId, {
+                    file: filePath,
+                    fileType: type,
+                    fileName: fileName
+                }, prev));
+                
+                alert(`파일이 첨부되었습니다: ${fileName}`);
+            };
+            
+            // 파일 제거
+            const removeFile = (nodeId) => {
+                setMindMap(prev => updateNodeInTree(nodeId, {
+                    file: null,
+                    fileType: null,
+                    fileName: null
+                }, prev));
+            };
+            
+            // 노드 토글
+            const toggleNode = (nodeId) => {
+                setExpandedNodes(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(nodeId)) {
+                        newSet.delete(nodeId);
+                    } else {
+                        newSet.add(nodeId);
+                    }
+                    return newSet;
+                });
+            };
+            
+            // 모달 리사이즈
+            const handleResizeStart = (e, direction) => {
+                e.preventDefault();
+                setIsResizing(direction);
+                setResizeStart({
+                    x: e.clientX,
+                    y: e.clientY,
+                    width: modalSize.width,
+                    height: modalSize.height
+                });
+            };
+            
+            useEffect(() => {
+                if (!isResizing) return;
+                
+                const handleMouseMove = (e) => {
+                    const deltaX = e.clientX - resizeStart.x;
+                    const deltaY = e.clientY - resizeStart.y;
+                    
+                    let newWidth = resizeStart.width;
+                    let newHeight = resizeStart.height;
+                    
+                    if (isResizing.includes('right')) newWidth = Math.max(600, resizeStart.width + deltaX);
+                    if (isResizing.includes('left')) newWidth = Math.max(600, resizeStart.width - deltaX);
+                    if (isResizing.includes('bottom')) newHeight = Math.max(400, resizeStart.height + deltaY);
+                    if (isResizing.includes('top')) newHeight = Math.max(400, resizeStart.height - deltaY);
+                    
+                    setModalSize({ width: newWidth, height: newHeight });
+                };
+                
+                const handleMouseUp = () => setIsResizing(false);
+                
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+                
+                return () => {
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleMouseUp);
+                };
+            }, [isResizing, resizeStart]);
+            
+            // 드로잉 기능
+            useEffect(() => {
+                if (!canvasRef.current || !selectedNode) return;
+                
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctxRef.current = ctx;
+            }, [selectedNode, modalSize]);
+            
+            const startDrawing = (e) => {
+                if (!drawingMode) return;
+                setIsDrawing(true);
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX || e.touches?.[0].clientX) - rect.left;
+                const y = (e.clientY || e.touches?.[0].clientY) - rect.top;
+                
+                ctxRef.current.beginPath();
+                ctxRef.current.moveTo(x, y);
+            };
+            
+            const draw = (e) => {
+                if (!isDrawing || !drawingMode) return;
+                e.preventDefault();
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX || e.touches?.[0].clientX) - rect.left;
+                const y = (e.clientY || e.touches?.[0].clientY) - rect.top;
+                
+                if (drawingMode === 'eraser') {
+                    ctxRef.current.globalCompositeOperation = 'destination-out';
+                    ctxRef.current.lineWidth = 20;
+                } else {
+                    ctxRef.current.globalCompositeOperation = 'source-over';
+                    ctxRef.current.strokeStyle = drawingColor;
+                    ctxRef.current.lineWidth = drawingMode === 'highlighter' ? 15 : 2;
+                    ctxRef.current.globalAlpha = drawingMode === 'highlighter' ? 0.3 : 1;
+                }
+                
+                ctxRef.current.lineTo(x, y);
+                ctxRef.current.stroke();
+            };
+            
+            const stopDrawing = () => {
+                setIsDrawing(false);
+                if (ctxRef.current) {
+                    ctxRef.current.beginPath();
+                }
+            };
+            
+            // 캔버스 초기화
+            const clearCanvas = () => {
+                if (!canvasRef.current) return;
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            };
+            
+            // 마크다운 렌더링
+            const renderMarkdown = (content) => {
+                if (!content) return null;
+                
+                return content.split('\n').map((line, i) => {
+                    // 이미지
+                    if (line.match(/!\[.*?\]\(.*?\)/)) {
+                        return <p key={i} className="text-blue-600">{line}</p>;
+                    }
+                    // 헤더
+                    if (line.startsWith('# ')) {
+                        return <h1 key={i} className="text-2xl font-bold my-3">{line.slice(2)}</h1>;
+                    }
+                    if (line.startsWith('## ')) {
+                        return <h2 key={i} className="text-xl font-bold my-2">{line.slice(3)}</h2>;
+                    }
+                    if (line.startsWith('### ')) {
+                        return <h3 key={i} className="text-lg font-semibold my-2">{line.slice(4)}</h3>;
+                    }
+                    // 리스트
+                    if (line.startsWith('- ') || line.startsWith('* ')) {
+                        return <li key={i} className="ml-6 my-1">{line.slice(2)}</li>;
+                    }
+                    // 굵게
+                    if (line.includes('**')) {
+                        const parts = line.split(/\*\*(.*?)\*\*/g);
+                        return (
+                            <p key={i} className="my-1">
+                                {parts.map((part, j) => j % 2 === 1 ? 
+                                    <strong key={j}>{part}</strong> : part
+                                )}
+                            </p>
+                        );
+                    }
+                    // 일반
+                    if (line.trim()) {
+                        return <p key={i} className="my-1">{line}</p>;
+                    }
+                    return <br key={i} />;
+                });
+            };
+            
+            // 노드 렌더링
+            const renderNode = (node, level = 0) => {
+                const isExpanded = expandedNodes.has(node.id);
+                const hasChildren = node.children && node.children.length > 0;
+                const hasFile = !!node.file;
+                
+                return (
+                    <div key={node.id} className="my-1">
+                        <div className="flex items-center gap-1 group">
+                            {/* 펼치기/접기 버튼 */}
+                            {hasChildren ? (
+                                <button
+                                    onClick={() => toggleNode(node.id)}
+                                    className="w-5 h-5 flex items-center justify-center text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                                >
+                                    {isExpanded ? '▼' : '▶'}
+                                </button>
+                            ) : (
+                                <span className="w-5"></span>
+                            )}
+                            
+                            {/* 노드 본체 */}
+                            <div
+                                onClick={() => hasFile && setSelectedNode(node)}
+                                className={`
+                                    px-3 py-1.5 rounded-lg cursor-pointer transition-all
+                                    ${level === 0 
+                                        ? `${currentTheme.primary} ${currentTheme.headerText} font-bold shadow-lg text-lg` 
+                                        : level === 1 
+                                            ? `${currentTheme.nodeBg} ${currentTheme.border} border-2 font-semibold shadow-md ${currentTheme.text}`
+                                            : `${currentTheme.nodeBg} ${currentTheme.border} border hover:shadow-sm ${currentTheme.text}`
+                                    }
+                                    ${hasFile ? 'ring-2 ring-blue-300' : ''}
+                                `}
+                            >
+                                <div className="flex items-center gap-2">
+                                    {hasFile && <FileIcon type={node.fileType} />}
+                                    {editingNode === node.id ? (
+                                        <input
+                                            type="text"
+                                            value={node.title}
+                                            onChange={(e) => updateNodeTitle(node.id, e.target.value)}
+                                            onBlur={() => setEditingNode(null)}
+                                            onKeyDown={(e) => e.key === 'Enter' && setEditingNode(null)}
+                                            autoFocus
+                                            className="bg-transparent border-b border-current outline-none min-w-[100px]"
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    ) : (
+                                        <span onDoubleClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingNode(node.id);
+                                        }}>
+                                            {node.title}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {/* 액션 버튼들 */}
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {/* 파일 첨부 */}
+                                <label className="cursor-pointer">
+                                    <span className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded">📎</span>
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            if (e.target.files[0]) {
+                                                attachFile(node.id, e.target.files[0]);
+                                            }
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </label>
+                                
+                                {/* 파일 제거 */}
+                                {hasFile && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeFile(node.id);
+                                        }}
+                                        className="text-xs bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1 rounded"
+                                        title="파일 제거"
+                                    >
+                                        🗑️
+                                    </button>
+                                )}
+                                
+                                {/* 하위 노드 추가 */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        addNode(node.id);
+                                    }}
+                                    className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-600 px-2 py-1 rounded"
+                                    title="하위 노드 추가"
+                                >
+                                    +
+                                </button>
+                                
+                                {/* 노드 삭제 */}
+                                {node.id !== 'root' && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteNode(node.id);
+                                        }}
+                                        className="text-xs bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1 rounded"
+                                        title="노드 삭제"
+                                    >
+                                        🗑️
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {/* 자식 노드 */}
+                        {hasChildren && isExpanded && (
+                            <div className="ml-6 mt-1 border-l-2 border-gray-200 pl-4">
+                                {node.children.map(child => renderNode(child, level + 1))}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+            
+            return (
+                <div className={`h-screen ${currentTheme.secondary} flex flex-col`}>
+                    {/* 헤더 */}
+                    <header className={`${currentTheme.primary} text-white px-4 py-3 shadow-lg`}>
+                        <div className="flex items-center justify-between">
+                            <h1 className="text-xl font-bold">MindMap PT</h1>
+                            
+                            <div className="flex items-center gap-2">
+                                {/* 저장/불러오기 */}
+                                <button
+                                    onClick={saveData}
+                                    className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-sm transition-colors"
+                                >
+                                    💾 저장
+                                </button>
+                                <button
+                                    onClick={loadData}
+                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
+                                >
+                                    📂 불러오기
+                                </button>
+                                <button
+                                    onClick={exportZip}
+                                    className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors"
+                                >
+                                    📦 ZIP
+                                </button>
+                                
+                                <div className="w-px h-6 bg-white/30 mx-2"></div>
+                                
+                                {/* 테마 선택 */}
+                                <select
+                                    value={theme}
+                                    onChange={(e) => setTheme(e.target.value)}
+                                    className="px-3 py-1 bg-white/20 rounded text-sm outline-none cursor-pointer"
+                                >
+                                    {Object.entries(themes).map(([key, t]) => (
+                                        <option key={key} value={key} className="text-gray-800">
+                                            {t.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                
+                                <button
+                                    onClick={() => setShowHelp(true)}
+                                    className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm transition-colors"
+                                >
+                                    ❓ 도움말
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+                    
+                    {/* 메인 콘텐츠 */}
+                    <main className="flex-1 overflow-auto p-6">
+                        <div className="max-w-5xl mx-auto">
+                            {renderNode(mindMap)}
+                        </div>
+                    </main>
+                    
+                    {/* 모달 */}
+                    {selectedNode && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div
+                                ref={modalRef}
+                                className="bg-white rounded-lg shadow-2xl flex flex-col relative"
+                                style={{ width: modalSize.width, height: modalSize.height }}
+                            >
+                                {/* 리사이즈 핸들들 */}
+                                <div className="resize-handle corner cursor-nw-resize top-0 left-0" onMouseDown={(e) => handleResizeStart(e, 'top-left')} />
+                                <div className="resize-handle corner cursor-ne-resize top-0 right-0" onMouseDown={(e) => handleResizeStart(e, 'top-right')} />
+                                <div className="resize-handle corner cursor-sw-resize bottom-0 left-0" onMouseDown={(e) => handleResizeStart(e, 'bottom-left')} />
+                                <div className="resize-handle corner cursor-se-resize bottom-0 right-0" onMouseDown={(e) => handleResizeStart(e, 'bottom-right')} />
+                                <div className="resize-handle edge cursor-n-resize top-0 left-3 right-3 h-1" onMouseDown={(e) => handleResizeStart(e, 'top')} />
+                                <div className="resize-handle edge cursor-s-resize bottom-0 left-3 right-3 h-1" onMouseDown={(e) => handleResizeStart(e, 'bottom')} />
+                                <div className="resize-handle edge cursor-w-resize left-0 top-3 bottom-3 w-1" onMouseDown={(e) => handleResizeStart(e, 'left')} />
+                                <div className="resize-handle edge cursor-e-resize right-0 top-3 bottom-3 w-1" onMouseDown={(e) => handleResizeStart(e, 'right')} />
+                                
+                                {/* 헤더 */}
+                                <div className={`${currentTheme.primary} text-white px-4 py-3 rounded-t-lg flex items-center justify-between`}>
+                                    <div className="flex items-center gap-2">
+                                        <FileIcon type={selectedNode.fileType} />
+                                        <span className="font-semibold">{selectedNode.title}</span>
+                                        <span className="text-sm opacity-70">({selectedNode.fileName || selectedNode.file})</span>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setSelectedNode(null);
+                                            setDrawingMode(null);
+                                        }}
+                                        className="hover:bg-white/20 rounded p-1 transition-colors"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                
+                                {/* 툴 바 */}
+                                <div className="bg-gray-100 px-4 py-2 flex items-center gap-2 border-b flex-wrap">
+                                    <button
+                                        onClick={() => setFitMode('width')}
+                                        className={`px-3 py-1 rounded text-sm transition-colors ${fitMode === 'width' ? 'bg-blue-500 text-white' : 'bg-white hover:bg-gray-200'}`}
+                                    >
+                                        ↔ 폭 맞춤
+                                    </button>
+                                    <button
+                                        onClick={() => setFitMode('height')}
+                                        className={`px-3 py-1 rounded text-sm transition-colors ${fitMode === 'height' ? 'bg-blue-500 text-white' : 'bg-white hover:bg-gray-200'}`}
+                                    >
+                                        ↕ 높이 맞춤
+                                    </button>
+                                    
+                                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                                    
+                                    {/* 드로잉 툴 */}
+                                    <button
+                                        onClick={() => setDrawingMode(drawingMode === 'pen' ? null : 'pen')}
+                                        className={`px-3 py-1 rounded text-sm transition-colors ${drawingMode === 'pen' ? 'bg-gray-800 text-white' : 'bg-white hover:bg-gray-200'}`}
+                                        title="펜"
+                                    >
+                                        ✏️ 펜
+                                    </button>
+                                    <button
+                                        onClick={() => setDrawingMode(drawingMode === 'highlighter' ? null : 'highlighter')}
+                                        className={`px-3 py-1 rounded text-sm transition-colors ${drawingMode === 'highlighter' ? 'bg-yellow-400 text-white' : 'bg-white hover:bg-gray-200'}`}
+                                        title="형광펜"
+                                    >
+                                        🖍️ 형광펜
+                                    </button>
+                                    <button
+                                        onClick={() => setDrawingMode(drawingMode === 'eraser' ? null : 'eraser')}
+                                        className={`px-3 py-1 rounded text-sm transition-colors ${drawingMode === 'eraser' ? 'bg-red-400 text-white' : 'bg-white hover:bg-gray-200'}`}
+                                        title="지우개"
+                                    >
+                                        🧽 지우개
+                                    </button>
+                                    
+                                    {drawingMode && drawingMode !== 'eraser' && (
+                                        <input
+                                            type="color"
+                                            value={drawingColor}
+                                            onChange={(e) => setDrawingColor(e.target.value)}
+                                            className="w-8 h-8 rounded cursor-pointer border-0"
+                                            title="색상 선택"
+                                        />
+                                    )}
+                                    
+                                    <button
+                                        onClick={clearCanvas}
+                                        className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-600 rounded text-sm transition-colors"
+                                        title="전체 지우기"
+                                    >
+                                        🗑️ 전체 지우기
+                                    </button>
+                                    
+                                    <div className="flex-1"></div>
+                                    
+                                    <span className="text-xs text-gray-500">
+                                        {modalSize.width} × {modalSize.height}
+                                    </span>
+                                </div>
+                                
+                                {/* 콘텐츠 영역 */}
+                                <div className="flex-1 overflow-auto relative bg-gray-50">
+                                    <div className="p-4">
+                                        {selectedNode.fileType === 'pdf' && (
+                                            <div className="bg-white p-8 rounded shadow text-center">
+                                                <p className="text-gray-500 mb-4">📄 PDF 뷰어</p>
+                                                <p className="text-sm text-gray-400">파일: {selectedNode.file}</p>
+                                                <p className="text-sm text-gray-400 mt-2">폭/높이 맞춤 모드: {fitMode}</p>
+                                                <p className="text-sm text-gray-400 mt-2 text-blue-600">
+                                                    💡 실제 PDF.js 연동 필요
+                                                </p>
+                                            </div>
+                                        )}
+                                        
+                                        {selectedNode.fileType === 'html' && (
+                                            <div className="bg-white rounded shadow overflow-hidden" style={{ height: '100%' }}>
+                                                <iframe
+                                                    srcDoc={"<h1>HTML 예시</h1><p>실제 HTML 파일을 여기에 로드</p>"}
+                                                    className="w-full h-full border-0"
+                                                    sandbox="allow-scripts allow-same-origin"
+                                                    title="HTML Viewer"
+                                                />
+                                            </div>
+                                        )}
+                                        
+                                        {selectedNode.fileType === 'image' && (
+                                            <div className="flex items-center justify-center">
+                                                <img
+                                                    src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='%23999'%3E🖼️ 이미지 영역%3C/text%3E%3C/svg%3E"
+                                                    alt="Preview"
+                                                    className="max-w-full h-auto rounded shadow-lg"
+                                                    style={{
+                                                        maxWidth: fitMode === 'width' ? '100%' : 'auto',
+                                                        maxHeight: fitMode === 'height' ? '100%' : 'auto'
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                        
+                                        {selectedNode.fileType === 'md' && (
+                                            <div className="bg-white p-6 rounded shadow prose max-w-none">
+                                                {renderMarkdown('# 마크다운 예시\n\n이것은 **마크다운** 내용입니다.\n\n- 리스트 항목 1\n- 리스트 항목 2\n- 리스트 항목 3\n\n## 부제목\n\n실제 마크다운 파일을 여기에 로드합니다.')}
+                                            </div>
+                                        )}
+                                        
+                                        {selectedNode.fileType === 'txt' && (
+                                            <pre className="bg-white p-6 rounded shadow font-mono text-sm whitespace-pre-wrap">
+                                                {`텍스트 파일 내용 예시
+
+이것은 텍스트 파일의 내용입니다.
+실제 TXT 파일을 여기에 로드합니다.`}
+                                            </pre>
+                                        )}
+                                        
+                                        {!selectedNode.fileType && (
+                                            <div className="text-center text-gray-400 mt-20">
+                                                파일이 첨부되지 않았습니다
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* 드로잉 캔버스 */}
+                                    {drawingMode && (
+                                        <canvas
+                                            ref={canvasRef}
+                                            width={modalSize.width - 32}
+                                            height={modalSize.height - 150}
+                                            className="absolute top-0 left-0 cursor-crosshair"
+                                            style={{ pointerEvents: drawingMode ? 'auto' : 'none' }}
+                                            onMouseDown={startDrawing}
+                                            onMouseMove={draw}
+                                            onMouseUp={stopDrawing}
+                                            onMouseLeave={stopDrawing}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* 도움말 모달 */}
+                    {showHelp && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-xl font-bold">사용법</h2>
+                                    <button
+                                        onClick={() => setShowHelp(false)}
+                                        className="text-gray-500 hover:text-gray-700"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <div className="space-y-2 text-sm">
+                                    <p><strong>노드 추가:</strong> 📎 버튼 옆의 ➕ 버튼 클릭</p>
+                                    <p><strong>노드 삭제:</strong> 🗑️ 버튼 클릭</p>
+                                    <p><strong>제목 편집:</strong> 노드 더블클릭</p>
+                                    <p><strong>파일 첨부:</strong> 📎 버튼 클릭 후 파일 선택</p>
+                                    <p><strong>파일 보기:</strong> 파일이 첨부된 노드 클릭</p>
+                                    <p><strong>모달 크기 조절:</strong> 모서리/가장자리 드래그</p>
+                                    <p><strong>드로잉:</strong> 모달에서 ✏️ 또는 🖍️ 버튼 클릭</p>
+                                </div>
+                                <div className="mt-4 pt-4 border-t">
+                                    <p className="text-xs text-gray-500">
+                                        지원 파일: PDF, HTML, PNG, JPG, GIF, MD, TXT
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
