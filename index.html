@@ -51,6 +51,77 @@
             100% { opacity: 0; }
         }
         .save-flash { animation: saveIndicator 1s ease-out; }
+        
+        /* 트리 레이아웃 스타일 */
+        .tree-vertical .children-container {
+            margin-left: 1.5rem;
+            margin-top: 0.25rem;
+            padding-left: 1rem;
+            border-left: 2px solid #e5e7eb;
+        }
+        
+        .tree-tree .children-container {
+            margin-left: 1.5rem;
+            margin-top: 0.25rem;
+            position: relative;
+        }
+        
+        .tree-tree .child-wrapper {
+            position: relative;
+            padding-left: 1.5rem;
+        }
+        
+        .tree-tree .child-wrapper::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 1.25rem;
+            width: 1.25rem;
+            height: 2px;
+            background: #d1d5db;
+        }
+        
+        .tree-tree .child-wrapper::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 2px;
+            height: 1.25rem;
+            background: #d1d5db;
+        }
+        
+        .tree-tree .child-wrapper:first-child::after {
+            top: 1.25rem;
+            height: calc(100% - 1.25rem);
+        }
+        
+        .tree-tree .child-wrapper:last-child::after {
+            height: 1.25rem;
+        }
+        
+        .tree-tree .child-wrapper:only-child::after {
+            display: none;
+        }
+        
+        .tree-horizontal .node-content {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        
+        .tree-horizontal .children-container {
+            display: flex;
+            flex-direction: row;
+            gap: 1rem;
+            margin-top: 0;
+            margin-left: 1rem;
+            border-left: none;
+            border-top: 2px solid #e5e7eb;
+            padding-top: 1rem;
+            padding-left: 0;
+        }
     </style>
 </head>
 <body>
@@ -253,6 +324,7 @@
             // ==================== PHASE 2: 드래그 앤 드롭 상태 ====================
             const [draggingNode, setDraggingNode] = useState(null);
             const [dragOverNode, setDragOverNode] = useState(null);
+            const [treeLayout, setTreeLayout] = useState('tree'); // 'vertical' | 'tree' | 'horizontal'
             
             const currentTheme = themes[theme];
             const modalRef = useRef(null);
@@ -1373,10 +1445,14 @@
                             </div>
                         </div>
                         
-                        {/* 자식 노드 */}
+                        {/* 자식 노드 - 레이아웃별 렌더링 */}
                         {hasChildren && isExpanded && (
-                            <div className="ml-6 mt-1 border-l-2 border-gray-200 pl-4">
-                                {node.children.map(child => renderNode(child, level + 1))}
+                            <div className={`children-container ${treeLayout === 'tree' ? '' : ''}`}>
+                                {node.children.map((child, index) => (
+                                    <div key={child.id} className={treeLayout === 'tree' ? 'child-wrapper' : ''}>
+                                        {renderNode(child, level + 1)}
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>
@@ -1473,6 +1549,20 @@
                                     ))}
                                 </select>
                                 
+                                <div className="w-px h-6 bg-white/30 mx-1"></div>
+                                
+                                {/* 레이아웃 선택 */}
+                                <select
+                                    value={treeLayout}
+                                    onChange={(e) => setTreeLayout(e.target.value)}
+                                    className="px-3 py-1 bg-white/20 rounded text-sm outline-none cursor-pointer"
+                                    title="트리 레이아웃"
+                                >
+                                    <option value="vertical" className="text-gray-800">세로</option>
+                                    <option value="tree" className="text-gray-800">트리 ├─</option>
+                                    <option value="horizontal" className="text-gray-800">가로 →</option>
+                                </select>
+                                
                                 <button
                                     onClick={() => setShowHelp(true)}
                                     className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm transition-colors"
@@ -1484,7 +1574,7 @@
                     </header>
                     
                     {/* 메인 콘텐츠 */}
-                    <main className="flex-1 overflow-auto p-6">
+                    <main className={`flex-1 overflow-auto p-6 tree-${treeLayout}`}>
                         <div className="max-w-5xl mx-auto">
                             {renderNode(mindMap)}
                         </div>
